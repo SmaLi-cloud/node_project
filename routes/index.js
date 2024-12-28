@@ -1,24 +1,17 @@
 var express = require("express");
 var router = express.Router();
 const axios = require("axios");
-const pool = require("../public/javascripts/db");
+const { pool, db } = require("../public/javascripts/db");
 
-// 晓芳时光小程序
+// 小程序
 const APPID = "wxa1df5197cd53e10d";
 const APPSECRET = "733c41b4a3d602e0c654daccf2078728";
 
-// // 雷小安小程序
-// const APPID=wx796c5036c40da68a
-// const APPSECRET=6bf0d86930b0e1b0b5d26bf7434d2bfd
-
-// 内存中保存 access_token，避免重复获取
 let accessToken = null;
 let tokenExpiresAt = 0;
 
-/* GET home page. */
 router.get("/", async function (req, res, next) {
-  // 获取 access_token
-  res.send({ a: 1 });
+  res.send("welcome");
 });
 router.get("/get-tracker-list", async function (req, res, next) {
   getTracker((results) => {
@@ -28,12 +21,33 @@ router.get("/get-tracker-list", async function (req, res, next) {
 router.get("/get-tracker-detail", async function (req, res, next) {
   const { id } = req.query;
   getTrackerById(id, (results) => {
-    if (results.length) {
-      res.send(results[0]);
-    } else {
-      res.send(null);
-    }
+      res.send(results||null);
   });
+});
+
+router.post("/edit-tracker", async function (req, res, next) {
+  const { id, tracker_img } = req.body;
+  const detail = await getTrackerById(id);
+  console.log(detail);
+  
+  if (!detail) {
+    res.send({ message: "没有找到该记录" });
+  }
+  const tracker_img_arr = detail.tracker_img
+    ? detail.tracker_img.split(",")
+    : [];
+  tracker_img_arr.push(tracker_img);
+  if (tracker_img_arr.length > 5) {
+    res.send({ message: "图片数量不能超过5张" });
+    return
+  }
+
+  await db.update(
+    "tracker",
+    `tracker_img='${tracker_img_arr.join(",")}'`,
+    `id=${id}`
+  );
+  res.send({ code: 1 });
 });
 
 router.get("/get-miniprogram-code", async (req, res) => {
@@ -41,8 +55,7 @@ router.get("/get-miniprogram-code", async (req, res) => {
   try {
     // 获取 access_token
     const token = await getAccessToken();
-
-    // 调用目标接口，例如获取 NFC 的小程序 scheme
+    // 调用目标接口
     const apiUrl = `https://api.weixin.qq.com/wxa/getwxacodeunlimit?access_token=${token}`;
     const requestData = {
       scene: id,
@@ -62,7 +75,6 @@ router.get("/get-miniprogram-code", async (req, res) => {
   }
 });
 
-// https://api.weixin.qq.com/wxa/generatenfcscheme?access_token=ACCESS_TOKEN
 router.get("/get-nfc-scheme", async (req, res) => {
   try {
     // 获取 access_token
@@ -107,33 +119,38 @@ async function getAccessToken() {
     throw err;
   }
 }
-
 // 获取所有tracker
-const getTracker = (callback) => {
-  pool.query(
-    "SELECT id, tracker_img, video_src, title FROM tracker WHERE is_show = 1",
-    (err, results) => {
-      if (err) {
-        console.error("查询失败: ", err);
-        return callback(err);
-      }
-      callback(results);
-    }
-  );
+const getTracker = async (callback = () => {}) => {
+  try {
+    const results = await db.find(
+      "id, tracker_img, video_src, title",
+      "tracker",
+      "is_show = 1"
+    );
+    callback(results);
+  } catch (err) {
+    console.error("查询失败: ", err);
+    return callback(err);
+  }
 };
-const getTrackerById = (id, callback) => {
-  pool.query(
-    `SELECT id, tracker_img, video_src, title FROM tracker WHERE id = ${parseInt(
-      id
-    )}`,
-    (err, results) => {
-      if (err) {
-        console.error("查询失败: ", err);
-        return callback(err);
-      }
-      callback(results);
-    }
-  );
+// 根据ID获取tracker
+const getTrackerById = async (id, callback = () => {}) => {
+  try {
+    const results = await db.find(
+      "id, tracker_img, video_src, title",
+      "tracker",
+      "id = ?",
+      [parseInt(id)]
+    );
+
+
+    callback(results[0]);
+    return results[0];
+  } catch (err) {
+    console.error("查询失败: ", err);
+    callback(err);
+    return false;
+  }
 };
 
 module.exports = router;
