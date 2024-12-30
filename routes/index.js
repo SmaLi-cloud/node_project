@@ -1,7 +1,7 @@
 var express = require("express");
 var router = express.Router();
 const axios = require("axios");
-const { pool, db } = require("../public/javascripts/db");
+const { pool, db } = require("../src/db");
 
 // 小程序
 const APPID = "wxa1df5197cd53e10d";
